@@ -1,0 +1,182 @@
+# Crypto Feature Dimension Configuration (245D Total)
+# Simplified feature set for cryptocurrency markets
+# Updated: 2026-03-08
+
+# =============================================================================
+# Crypto-Specific Notes
+# =============================================================================
+# - NO fundamental data (no earnings, PE ratios, dividends, etc.)
+# - NO sector/industry classifications
+# - NO futures markets
+# - Reduced sentiment (crypto has different news/social sources)
+# - Technical indicators remain similar to equities
+# - Added crypto-specific features (on-chain metrics, exchange flows)
+
+# =============================================================================
+# SenVec Sentiment Features (Crypto)
+# =============================================================================
+senvec:
+    total: 30
+    feature_range: "f215-f244"
+    components:
+        market_sentiment:
+            dimensions: 15
+            range: "f215-f229"
+            description: "Crypto market sentiment (Fear/Greed, funding rates, open interest)"
+            service_url: "http://10.32.3.27:18007"  # senvec-crypto-market
+            update_frequency: "real-time"
+
+        social:
+            dimensions: 15
+            range: "f230-f244"
+            description: "Crypto social sentiment (Twitter, Reddit, Telegram)"
+            service_url: "http://10.32.3.27:18008"  # senvec-crypto-social
+            update_frequency: "real-time"
+
+# =============================================================================
+# FinColl Feature Extractor (Complete 245D Vector for Crypto)
+# =============================================================================
+fincoll:
+    total: 245
+    components:
+        technical:
+            dimensions: 81
+            datasource: "Alpaca Crypto"
+            description: "Core technical indicators (RSI, MACD, Bollinger, ATR, etc.)"
+            update_frequency: "real-time"
+            rate_limit:
+                requests_per_minute: 200
+                plan: "Alpaca Crypto (free tier)"
+
+        advanced_technical:
+            dimensions: 50
+            datasource: "Alpaca Crypto"
+            description: "Advanced technical indicators (Ichimoku, divergence, cycles)"
+            update_frequency: "1-minute bars"
+            rate_limit:
+                requests_per_minute: 200
+                plan: "Alpaca Crypto (free tier)"
+
+        velocity:
+            dimensions: 20
+            datasource: "Alpaca Crypto"
+            description: "Price velocity and acceleration (derived from OHLCV)"
+            update_frequency: "real-time"
+            rate_limit:
+                requests_per_minute: 200
+                plan: "Alpaca Crypto (derived)"
+
+        crypto_specific:
+            dimensions: 34
+            datasource: "CoinGecko / On-chain APIs"
+            description: "Crypto-specific features (volume profiles, funding rates, liquidations)"
+            update_frequency: "5-minute"
+            rate_limit:
+                calls_per_minute: 50
+                plan: "CoinGecko Pro"
+
+        senvec_features:
+            dimensions: 30
+            datasource: "SenVec Crypto Services"
+            description: "Crypto sentiment from market and social sources"
+            service_url: "http://10.32.3.27:18007-18008"
+            update_frequency: "real-time"
+
+        cross_market:
+            dimensions: 30
+            datasource: "Multiple"
+            description: "Cross-crypto correlations, BTC dominance, market cap ratios"
+            update_frequency: "1-minute"
+
+# =============================================================================
+# Feature Index Mapping (0-244)
+# =============================================================================
+feature_indices:
+    # Core Technical (0-80): Same as equities
+    technical_start: 0
+    technical_end: 80
+
+    # Advanced Technical (81-130): Same as equities
+    advanced_technical_start: 81
+    advanced_technical_end: 130
+
+    # Velocity (131-150): Same as equities
+    velocity_start: 131
+    velocity_end: 150
+
+    # Crypto-Specific (151-184): NEW for crypto
+    crypto_specific_start: 151
+    crypto_specific_end: 184
+    crypto_features:
+        - "funding_rate_1h"           # 151
+        - "funding_rate_4h"           # 152
+        - "funding_rate_8h"           # 153
+        - "open_interest_change_1h"   # 154
+        - "open_interest_change_4h"   # 155
+        - "open_interest_change_24h"  # 156
+        - "liquidation_volume_long"   # 157
+        - "liquidation_volume_short"  # 158
+        - "exchange_inflow_btc"       # 159
+        - "exchange_outflow_btc"      # 160
+        - "whale_transaction_count"   # 161
+        - "active_addresses_24h"      # 162
+        - "network_hash_rate_change"  # 163 (BTC/POW only)
+        - "staking_ratio"             # 164 (POS coins)
+        - "volatility_index"          # 165
+        - "implied_volatility_30d"    # 166
+        - "put_call_ratio"            # 167
+        - "basis_spread"              # 168 (futures-spot)
+        - "perp_premium"              # 169
+        - "market_cap_rank"           # 170
+        - "volume_rank_24h"           # 171
+        - "circulating_supply_pct"    # 172
+        - "inflation_rate_annual"     # 173
+        - "taker_buy_sell_ratio"      # 174
+        - "bid_ask_spread_bps"        # 175
+        - "orderbook_imbalance"       # 176
+        - "large_tx_volume"           # 177
+        - "exchange_reserves"         # 178
+        - "miner_reserves"            # 179 (BTC/POW)
+        - "defi_tvl_change"           # 180 (DeFi tokens)
+        - "dex_volume_ratio"          # 181
+        - "cex_volume_ratio"          # 182
+        - "wash_trade_score"          # 183
+        - "manipulation_risk_score"   # 184
+
+    # Cross-Market (185-214): Correlations and dominance
+    cross_market_start: 185
+    cross_market_end: 214
+
+    # SenVec Sentiment (215-244): Crypto sentiment
+    senvec_start: 215
+    senvec_end: 244
+
+# =============================================================================
+# Missing from Equity Version (Not Applicable to Crypto)
+# =============================================================================
+# - Fundamentals (16D): No PE, ROE, earnings, dividends
+# - Futures (40D): No equity futures markets
+# - Earnings (9D): No earnings reports
+# - Sector (24D): No sector/industry classifications
+# - Options (30D): Options exist but not as liquid as equities
+# - News sentiment: Replaced with crypto-specific social sentiment
+
+# =============================================================================
+# Total Dimension Breakdown
+# =============================================================================
+# Technical:            81D (0-80)
+# Advanced Technical:   50D (81-130)
+# Velocity:             20D (131-150)
+# Crypto-Specific:      34D (151-184)
+# Cross-Market:         30D (185-214)
+# SenVec Sentiment:     30D (215-244)
+# =============================================================================
+# TOTAL:               245D
+# =============================================================================
+
+# Version info
+version: "1.0.0"
+last_updated: "2026-03-08"
+compatible_with:
+    finvec_crypto: ">=0.1.0"
+    fincoll_crypto: ">=0.1.0"

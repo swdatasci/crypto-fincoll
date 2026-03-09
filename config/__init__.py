@@ -1,0 +1,1 @@
+"""FinColl configuration module."""

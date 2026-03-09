@@ -1,0 +1,53 @@
+# FinColl V7 API Server Requirements
+# Feature extraction and prediction API for FinVec V7 integration
+
+# Core API Framework
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.6.0
+pydantic-settings>=2.1.0
+python-multipart>=0.0.9
+
+# Data Processing
+pandas>=2.2.0
+numpy>=1.26.0
+pyarrow>=15.0.0  # For Parquet feature caching
+
+# Financial Data Sources
+yfinance>=0.2.36
+alpaca-py>=0.18.0
+# tradestation - No official PyPI package, use custom client in fincoll/providers/tradestation.py
+
+# Sentiment Analysis (SenVec integration)
+transformers>=4.37.0
+torch>=2.2.0
+sentencepiece>=0.1.99
+
+# Machine Learning (for FinVec V7 model integration)
+scikit-learn>=1.4.0
+
+# Technical Analysis
+# ta-lib - Requires system TA-Lib library (sudo apt-get install ta-lib), install separately if needed
+
+# HTTP Client
+httpx>=0.26.0
+aiohttp>=3.9.0
+
+# Environment and Config
+python-dotenv>=1.0.0
+
+# Utilities
+python-dateutil>=2.8.0
+pytz>=2024.1
+
+# Logging and Monitoring
+loguru>=0.7.0
+
+# Testing (development)
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+pytest-cov>=4.1.0
+
+# Optional: Database for feature cache
+# sqlalchemy>=2.0.25
+# asyncpg>=0.29.0  # For PostgreSQL async

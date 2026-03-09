@@ -1,0 +1,181 @@
+#!/usr/bin/env python3
+"""
+Tests for HistoricalFeatureUpdater
+"""
+
+import sys
+from pathlib import Path
+import unittest
+import numpy as np
+from datetime import datetime, timedelta
+from unittest.mock import Mock, patch, MagicMock
+
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from fincoll.training.historical_feature_updater import HistoricalFeatureUpdater
+
+
+class TestHistoricalFeatureUpdater(unittest.TestCase):
+    """Test suite for HistoricalFeatureUpdater"""
+
+    def setUp(self):
+        """Set up test fixtures before each test method."""
+        self.updater = HistoricalFeatureUpdater(dry_run=True)
+        self.updater.logger = Mock()  # Mock logger to avoid output during tests
+
+    def test_augment_with_zeros_single_vector(self):
+        """Test augmenting a single feature vector with zeros."""
+        # Given: existing 5D vector
+        existing_features = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        new_features = [("test_feature", 3)]
+
+        # When: augment with zeros
+        result = self.updater._augment_with_zeros(existing_features, new_features)
+
+        # Then: result should be 8D with zeros appended
+        self.assertEqual(len(result), 8)
+        np.testing.assert_array_equal(result[:5], existing_features)
+        np.testing.assert_array_equal(result[5:], np.zeros(3))
+
+    def test_augment_with_zeros_multiple_features(self):
+        """Test augmenting with multiple new feature components."""
+        existing_features = np.array([1.0, 2.0])
+        new_features = [("feature1", 2), ("feature2", 3)]
+
+        result = self.updater._augment_with_zeros(existing_features, new_features)
+
+        self.assertEqual(len(result), 7)  # 2 + 2 + 3
+        np.testing.assert_array_equal(result[:2], existing_features)
+        np.testing.assert_array_equal(result[2:4], np.zeros(2))
+        np.testing.assert_array_equal(result[4:7], np.zeros(3))
+
+    def test_augment_with_zeros_time_series(self):
+        """Test augmenting time series data (2D array)."""
+        existing_features = np.array([
+            [1.0, 2.0, 3.0],
+            [4.0, 5.0, 6.0]
+        ])
+        new_features = [("new_feature", 2)]
+
+        result = self.updater._augment_with_zeros(existing_features, new_features)
+
+        self.assertEqual(result.shape, (2, 5))  # 2 rows, 3+2 columns
+        np.testing.assert_array_equal(result[:, :3], existing_features)
+        np.testing.assert_array_equal(result[:, 3:], np.zeros((2, 2)))
+
+    def test_identify_new_features(self):
+        """Test detecting new/unimplemented features."""
+        # Mock the dimension config
+        self.updater.dim_config = {
+            'fincoll': {
+                'components': {
+                    'technical': 81,  # Should be considered implemented
+                    'options': 10,    # Might not be implemented
+                    'new_feature': 5   # New feature
+                }
+            }
+        }
+
+        # Mock _check_feature_implemented to simulate options/new_feature not implemented
+        with patch.object(self.updater, '_check_feature_implemented', side_effect=lambda x: x == 'technical'):
+            new_features = self.updater.identify_new_features()
+
+        # Should return options and new_feature
+        feature_names = [name for name, _ in new_features]
+        self.assertIn('options', feature_names)
+        self.assertIn('new_feature', feature_names)
+        self.assertNotIn('technical', feature_names)
+
+    def test_get_component_dimensions(self):
+        """Test retrieving dimension ranges for components."""
+        dims = self.updater._get_component_dimensions('technical')
+        
+        # Technical should be f000-f080 (81 dimensions)
+        self.assertEqual(len(dims), 81)
+        self.assertEqual(dims[0], 'f000')
+        self.assertEqual(dims[-1], 'f080')
+
+    def test_get_component_dimensions_unknown(self):
+        """Test retrieving dimensions for unknown component."""
+        dims = self.updater._get_component_dimensions('unknown_component')
+        self.assertEqual(len(dims), 0)
+
+    def test_config_hash_computation(self):
+        """Test that config hash is computed correctly."""
+        hash1 = self.updater._compute_config_hash()
+        self.assertIsInstance(hash1, str)
+        self.assertEqual(len(hash1), 8)  # MD5 truncated to 8 chars
+
+    @patch('fincoll.storage.influxdb_loader.InfluxDBLoader')
+    def test_has_existing_data_true(self, mock_loader):
+        """Test checking for existing data when data exists."""
+        mock_loader_instance = Mock()
+        mock_loader_instance.load_features.return_value = pd.DataFrame({'test': [1, 2]})
+        self.updater.influx_loader = mock_loader_instance
+
+        result = self.updater._has_existing_data('AAPL', datetime.now())
+        
+        self.assertTrue(result)
+
+    @patch('fincoll.storage.influxdb_loader.InfluxDBLoader')
+    def test_has_existing_data_false(self, mock_loader):
+        """Test checking for existing data when no data exists."""
+        mock_loader_instance = Mock()
+        mock_loader_instance.load_features.return_value = pd.DataFrame()
+        self.updater.influx_loader = mock_loader_instance
+
+        result = self.updater._has_existing_data('AAPL', datetime.now())
+        
+        self.assertFalse(result)
+
+    @patch('fincoll.storage.influxdb_saver.InfluxDBSaver')
+    def test_save_features(self, mock_saver):
+        """Test saving features to database with proper tags."""
+        mock_saver_instance = Mock()
+        self.updater.influx_saver = mock_saver_instance
+
+        # Save test features
+        test_features = np.array([1.0, 2.0, 3.0])
+        test_date = datetime(2024, 1, 1)
+        
+        self.updater._save_features('TEST', test_date, test_features)
+
+        # Verify saver was called with correct tags
+        mock_saver_instance.save_training_sample.assert_called_once()
+        call_args = mock_saver_instance.save_training_sample.call_args
+        
+        # Check that tags include backfill marker
+        tags = call_args[1]['tags']
+        self.assertEqual(tags['backfill'], 'true')
+        self.assertTrue(tags['config_version'].startswith('v'))
+
+    def test_print_summary(self):
+        """Test that summary statistics print correctly (no exceptions)."""
+        # This test just ensures no exception is raised
+        self.updater._print_summary()
+        # If we get here, the method executed successfully
+        self.assertTrue(True)
+
+    def test_validator_with_correct_dimensions(self):
+        """Test validation when dimensions are correct."""
+        self.updater.DIMS = Mock()
+        self.updater.DIMS.fincoll_total = 353
+
+        # Mock a sample with correct dimensions
+        mock_sample = pd.DataFrame({
+            'symbol': ['AAPL'],
+            'timestamp': [datetime(2024, 1, 1)],
+            'features': [np.ones(353)]
+        })
+        
+        with patch.object(self.updater, 'identify_new_features', return_value=[]):
+            with patch.object(self.updater.influx_loader, 'get_random_samples', return_value=mock_sample):
+                results = self.updater.validate_backfill(sample_size=1)
+                
+                self.assertEqual(results['total_checked'], 1)
+                self.assertEqual(results['correct_dim'], 1)
+
+
+if __name__ == '__main__':
+    unittest.main()

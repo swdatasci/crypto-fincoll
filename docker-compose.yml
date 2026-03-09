@@ -1,0 +1,147 @@
+# FinColl Docker Compose Configuration
+#
+# DEPLOYMENT OPTIONS (use profiles to select):
+#
+# 1. Development (default):
+#    docker-compose up
+#
+# 2. Production:
+#    docker-compose --profile production up
+#
+# 3. Multi-version testing:
+#    docker-compose --profile testing up
+#
+# 4. Systemd-managed:
+#    systemctl start fincoll-docker
+
+version: '3.8'
+
+services:
+  # ============================================================================
+  # OPTION 1: Development (default profile)
+  # ============================================================================
+  fincoll-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fincoll-dev
+    restart: "no"  # Manual restart for dev
+    ports:
+      - "8001:8001"
+    environment:
+      - FINCOLL_HOST=0.0.0.0
+      - FINCOLL_PORT=8001
+      - FINCOLL_DEBUG=true
+      - FINCOLL_LOG_LEVEL=DEBUG
+      - CREDENTIALS_DIR=/credentials
+    volumes:
+      # Mount credentials from host
+      - ${CREDENTIALS_DIR:-/home/rford/caelum/ss}/.alpha_vantage_credentials.json:/credentials/.alpha_vantage_credentials.json:ro
+      - ${CREDENTIALS_DIR:-/home/rford/caelum/ss}/.tradestation_token.json:/credentials/.tradestation_token.json:ro
+      # Mount code for live reload (dev only)
+      - ./fincoll:/app/fincoll:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://10.32.3.27:8001/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - fincoll-network
+    profiles:
+      - dev
+      - ""  # Default profile
+
+  # ============================================================================
+  # OPTION 2: Production (use --profile production)
+  # ============================================================================
+  fincoll-production:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: fincoll:${VERSION:-latest}
+    container_name: fincoll-production
+    restart: always  # Auto-restart on failure
+    ports:
+      - "${FINCOLL_PORT:-8001}:8001"
+    environment:
+      - FINCOLL_HOST=0.0.0.0
+      - FINCOLL_PORT=8001
+      - FINCOLL_DEBUG=false
+      - FINCOLL_LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - CREDENTIALS_DIR=/credentials
+      - SENVEC_API_URL=${SENVEC_API_URL:-http://10.32.3.27:8000}
+    volumes:
+      # Credentials only (no code mount)
+      - ${CREDENTIALS_DIR:-/home/rford/caelum/ss}/.alpha_vantage_credentials.json:/credentials/.alpha_vantage_credentials.json:ro
+      - ${CREDENTIALS_DIR:-/home/rford/caelum/ss}/.tradestation_token.json:/credentials/.tradestation_token.json:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://10.32.3.27:8001/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          memory: 512M
+    networks:
+      - fincoll-network
+    profiles:
+      - production
+
+  # ============================================================================
+  # OPTION 3: Multi-version Testing (use --profile testing)
+  # ============================================================================
+  # Test Version 1 (stable)
+  fincoll-v1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: fincoll:v1
+    container_name: fincoll-v1
+    restart: "no"
+    ports:
+      - "8001:8001"
+    environment:
+      - FINCOLL_HOST=0.0.0.0
+      - FINCOLL_PORT=8001
+      - FINCOLL_LOG_LEVEL=INFO
+      - CREDENTIALS_DIR=/credentials
+    volumes:
+      - ${CREDENTIALS_DIR:-/home/rford/caelum/ss}/.alpha_vantage_credentials.json:/credentials/.alpha_vantage_credentials.json:ro
+      - ${CREDENTIALS_DIR:-/home/rford/caelum/ss}/.tradestation_token.json:/credentials/.tradestation_token.json:ro
+    networks:
+      - fincoll-network
+    profiles:
+      - testing
+
+  # Test Version 2 (experimental)
+  fincoll-v2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: fincoll:v2
+    container_name: fincoll-v2
+    restart: "no"
+    ports:
+      - "8002:8001"  # Different port!
+    environment:
+      - FINCOLL_HOST=0.0.0.0
+      - FINCOLL_PORT=8001
+      - FINCOLL_LOG_LEVEL=DEBUG
+      - CREDENTIALS_DIR=/credentials
+    volumes:
+      - ${CREDENTIALS_DIR:-/home/rford/caelum/ss}/.alpha_vantage_credentials.json:/credentials/.alpha_vantage_credentials.json:ro
+      - ${CREDENTIALS_DIR:-/home/rford/caelum/ss}/.tradestation_token.json:/credentials/.tradestation_token.json:ro
+    networks:
+      - fincoll-network
+    profiles:
+      - testing
+
+networks:
+  fincoll-network:
+    driver: bridge

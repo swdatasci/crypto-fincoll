@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""
+FinColl API Health Check Tests
+Tests basic API functionality and health endpoints without real API calls.
+"""
+
+import os
+import pytest
+import numpy as np
+import pandas as pd
+from unittest.mock import MagicMock, patch
+from fastapi.testclient import TestClient
+from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from fincoll.server import app
+from config.dimensions import DIMS
+
+
+def _make_ohlcv(n=100, seed=42):
+    dates = pd.bdate_range(end=pd.Timestamp('2026-02-13'), periods=n)
+    rng = np.random.default_rng(seed)
+    m = len(dates)
+    close = 185.0 * np.exp(np.cumsum(rng.standard_normal(m) * 0.01))
+    return pd.DataFrame({
+        'open': close, 'high': close * 1.005, 'low': close * 0.995,
+        'close': close, 'volume': np.ones(m) * 1e7,
+    }, index=dates)
+
+
+@pytest.fixture(scope="module")
+def client():
+    """
+    Module-scoped test client with all external dependencies mocked.
+
+    Module scope (single startup/shutdown) avoids repeated network-touching
+    initializations (AlphaVantageClient, TradeStationProvider, etc.) that can
+    hang or time-out when no real network is available.
+    """
+    import fincoll.providers.tradestation_provider as ts_prov_mod
+    import fincoll.providers.yfinance_provider as yf_prov_mod
+    import fincoll.features.feature_extractor as fe_mod
+
+    synthetic = _make_ohlcv()
+    synthetic_features = np.zeros(DIMS.fincoll_total, dtype=np.float32)
+    synthetic_features[:100] = 0.5
+
+    mock_ts = MagicMock()
+    mock_ts.is_available.return_value = True
+    mock_ts.get_name.return_value = "tradestation"
+    mock_ts.get_historical_bars.return_value = synthetic
+
+    mock_yf = MagicMock()
+    mock_yf.get_name.return_value = "yfinance"
+    mock_yf.get_historical_bars.return_value = synthetic
+
+    mock_extractor = MagicMock()
+    mock_extractor.extract_features.return_value = synthetic_features
+    mock_extractor.enable_senvec = False
+
+    mock_av = MagicMock()
+
+    import fincoll.api.training as training_mod
+    import fincoll.api.inference as inference_mod
+    import fincoll.inference as inf_pkg
+
+    mock_cache = MagicMock()
+    mock_cache.enabled = False
+    mock_engine = MagicMock()
+    mock_engine.predict.return_value = {"metadata": {}, "velocities": [], "best_opportunity": {}}
+
+    with patch.object(ts_prov_mod, 'TradeStationProvider', MagicMock(return_value=mock_ts)), \
+         patch.object(yf_prov_mod, 'YFinanceProvider', MagicMock(return_value=mock_yf)), \
+         patch.object(fe_mod, 'FeatureExtractor', MagicMock(return_value=mock_extractor)), \
+         patch.object(training_mod, 'TradeStationProvider', MagicMock(return_value=mock_ts)), \
+         patch.object(training_mod, 'YFinanceProvider', MagicMock(return_value=mock_yf)), \
+         patch.object(training_mod, 'FeatureExtractor', MagicMock(return_value=mock_extractor)), \
+         patch.object(training_mod, 'AlphaVantageClient', MagicMock(return_value=mock_av)), \
+         patch.object(inference_mod, 'TradeStationProvider', MagicMock(return_value=mock_ts)), \
+         patch.object(inference_mod, 'YFinanceProvider', MagicMock(return_value=mock_yf)), \
+         patch.object(inference_mod, 'FeatureExtractor', MagicMock(return_value=mock_extractor)), \
+         patch.object(inference_mod, 'AlphaVantageClient', MagicMock(return_value=mock_av)), \
+         patch.object(inference_mod, 'CachedDataProvider', lambda provider, source_name="": provider), \
+         patch.object(inference_mod, 'get_cache', MagicMock(return_value=mock_cache)), \
+         patch.object(inf_pkg, 'get_velocity_engine', MagicMock(return_value=mock_engine)), \
+         patch.dict(os.environ, {'SENVEC_CACHE_CONTROL': 'false'}):
+        with TestClient(app) as c:
+            yield c
+
+
+def test_root_endpoint(client):
+    """Root endpoint returns service info."""
+    response = client.get("/")
+    assert response.status_code == 200
+    data = response.json()
+    assert data['service'] == 'FinColl'
+    assert 'endpoints' in data
+
+
+def test_health_check(client):
+    """Health check endpoint returns healthy status with required fields."""
+    response = client.get("/health")
+    assert response.status_code == 200
+    data = response.json()
+    assert data['status'] == 'healthy'
+    assert 'timestamp' in data
+    assert 'version' in data
+    assert 'data_sources' in data
+    sources = data['data_sources']
+    assert 'alpha_vantage' in sources
+    assert 'tradestation' in sources
+    assert 'senvec' in sources
+
+
+def test_sources_status(client):
+    """Sources status endpoint returns all expected data sources."""
+    response = client.get("/api/v1/sources/status")
+    assert response.status_code == 200
+    data = response.json()
+    assert 'timestamp' in data
+    assert 'sources' in data
+    sources = data['sources']
+    assert 'alpha_vantage' in sources
+    assert 'tradestation' in sources
+    assert 'senvec' in sources
+    for source_name, source_info in sources.items():
+        assert isinstance(source_info, dict)
+        assert any(key in source_info for key in ['configured', 'enabled'])
+
+
+def test_training_endpoint_exists(client):
+    """Training features endpoint is implemented and returns data."""
+    response = client.get("/api/v1/training/features/AAPL")
+    assert response.status_code == 200
+    data = response.json()
+    assert 'features' in data or 'metadata' in data
+
+
+def test_inference_endpoint_exists(client):
+    """Inference features endpoint is implemented and returns features."""
+    response = client.get("/api/v1/inference/features/AAPL")
+    assert response.status_code == 200
+    data = response.json()
+    assert 'features' in data or 'feature_vector' in data
+    assert 'metadata' in data or 'provider' in data

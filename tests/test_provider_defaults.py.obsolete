@@ -1,0 +1,196 @@
+"""
+Unit tests for data provider default behavior
+
+Tests verify provider selection logic without making real API calls.
+All external data providers and feature extraction are mocked.
+"""
+
+import pytest
+import numpy as np
+import pandas as pd
+from unittest.mock import MagicMock
+from fastapi.testclient import TestClient
+from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from fincoll.server import app
+from config.dimensions import DIMS
+
+
+def _make_ohlcv(n=300, seed=42):
+    dates = pd.bdate_range(end=pd.Timestamp('2026-02-13'), periods=n)
+    rng = np.random.default_rng(seed)
+    m = len(dates)
+    close = 185.0 * np.exp(np.cumsum(rng.standard_normal(m) * 0.01))
+    high = close * (1 + np.abs(rng.standard_normal(m) * 0.005))
+    low  = close * (1 - np.abs(rng.standard_normal(m) * 0.005))
+    open_ = close * (1 + rng.standard_normal(m) * 0.003)
+    volume = rng.integers(50_000_000, 100_000_000, m).astype(float)
+    return pd.DataFrame(
+        {'open': open_, 'high': high, 'low': low, 'close': close, 'volume': volume},
+        index=dates
+    )
+
+
+def _make_features():
+    arr = np.zeros(DIMS.fincoll_total, dtype=np.float32)
+    arr[:int(DIMS.fincoll_total * 0.7)] = 0.5
+    return arr
+
+
+def _make_ts_mock(available=True):
+    m = MagicMock()
+    m.is_available.return_value = available
+    m.get_name.return_value = "tradestation"
+    m.get_historical_bars.return_value = _make_ohlcv()
+    return m
+
+
+def _make_yf_mock():
+    m = MagicMock()
+    m.get_name.return_value = "yfinance"
+    m.get_historical_bars.return_value = _make_ohlcv()
+    return m
+
+
+@pytest.fixture
+def client(monkeypatch):
+    """Test client with all external dependencies mocked."""
+    # Import the actual modules so we can patch their attributes
+    import fincoll.providers.tradestation_provider as ts_prov_mod
+    import fincoll.providers.yfinance_provider as yf_prov_mod
+    import fincoll.features.feature_extractor as fe_mod
+    import fincoll.api.inference as inf_mod
+    import fincoll.inference as inf_pkg
+
+    synthetic_features = _make_features()
+
+    mock_ts = _make_ts_mock(available=True)
+    mock_yf = _make_yf_mock()
+
+    mock_extractor = MagicMock()
+    mock_extractor.extract_features.return_value = synthetic_features
+    mock_extractor.enable_senvec = False
+
+    mock_cache = MagicMock()
+    mock_cache.enabled = False
+
+    mock_engine = MagicMock()
+    mock_engine.predict.return_value = {"metadata": {}, "velocities": [], "best_opportunity": {}}
+
+    # Patch provider classes in their source modules (for server.py startup which imports locally)
+    mock_ts_class = MagicMock(return_value=mock_ts)
+    mock_yf_class = MagicMock(return_value=mock_yf)
+    mock_extractor_class = MagicMock(return_value=mock_extractor)
+
+    monkeypatch.setattr(ts_prov_mod, 'TradeStationProvider', mock_ts_class)
+    monkeypatch.setattr(yf_prov_mod, 'YFinanceProvider', mock_yf_class)
+    monkeypatch.setattr(fe_mod, 'FeatureExtractor', mock_extractor_class)
+
+    # Patch per-request providers in inference.py (module-level imports)
+    monkeypatch.setattr(inf_mod, 'TradeStationProvider', mock_ts_class)
+    monkeypatch.setattr(inf_mod, 'YFinanceProvider', mock_yf_class)
+    monkeypatch.setattr(inf_mod, 'FeatureExtractor', mock_extractor_class)
+    monkeypatch.setattr(inf_mod, 'CachedDataProvider', lambda provider, source_name="": provider)
+    monkeypatch.setattr(inf_mod, 'get_cache', MagicMock(return_value=mock_cache))
+
+    # Patch velocity engine (imported locally inside predict function via ..inference)
+    monkeypatch.setattr(inf_pkg, 'get_velocity_engine', MagicMock(return_value=mock_engine))
+    # Disable SenVec controller so startup doesn't try to connect to 10.32.3.27:18000
+    monkeypatch.setenv('SENVEC_CACHE_CONTROL', 'false')
+
+    with TestClient(app) as c:
+        yield c
+
+
+@pytest.fixture
+def mock_tradestation_unavailable(monkeypatch):
+    """Override TradeStation mock to simulate unavailability for fallback test."""
+    import fincoll.api.inference as inf_mod
+
+    mock_ts_down = _make_ts_mock(available=False)
+    monkeypatch.setattr(inf_mod, 'TradeStationProvider', MagicMock(return_value=mock_ts_down))
+
+
+class TestProviderDefaults:
+    """Test that TradeStation is used by default, yfinance only as fallback"""
+
+    def test_prediction_uses_tradestation_by_default(self, client: TestClient):
+        """When no provider specified, predict endpoint defaults to TradeStation."""
+        response = client.post("/api/v1/inference/predict/AAPL")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "metadata" in data, f"Response missing 'metadata': {data}"
+        assert data["metadata"]["provider"] == "tradestation", \
+            f"Expected provider='tradestation', got {data['metadata']['provider']!r}"
+
+    def test_features_use_tradestation_by_default(self, client: TestClient):
+        """Feature extraction endpoint defaults to TradeStation provider."""
+        response = client.get("/api/v1/inference/features/AAPL")
+
+        assert response.status_code == 200
+        data = response.json()
+        provider = data.get("provider") or data.get("metadata", {}).get("provider")
+        assert provider is not None, f"Response missing 'provider' field: {data}"
+        assert provider.lower() == "tradestation", \
+            f"Expected provider='tradestation', got {provider!r}"
+
+    def test_yfinance_only_when_explicitly_requested(self, client: TestClient):
+        """yfinance should only be used when explicitly specified via provider param."""
+        response = client.post("/api/v1/inference/predict/AAPL?provider=yfinance")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["metadata"]["provider"] == "yfinance", \
+            f"Expected provider='yfinance', got {data['metadata']['provider']!r}"
+
+    def test_fallback_to_yfinance_when_tradestation_unavailable(
+        self,
+        client: TestClient,
+        mock_tradestation_unavailable,
+    ):
+        """When TradeStation is unavailable, predict automatically falls back to yfinance."""
+        response = client.post("/api/v1/inference/predict/AAPL")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["metadata"]["provider"].lower() == "yfinance", \
+            f"Expected fallback to 'yfinance', got {data['metadata']['provider']!r}"
+
+
+class TestProviderPriority:
+    """Test that provider selection respects priority order"""
+
+    def test_provider_priority_order(self, client: TestClient):
+        """
+        TradeStation is default; yfinance used only when explicitly requested.
+        Tests actual API behaviour rather than a hardcoded list.
+        """
+        # Explicit yfinance request returns yfinance
+        yf_resp = client.post("/api/v1/inference/predict/AAPL?provider=yfinance")
+        assert yf_resp.status_code == 200
+        assert yf_resp.json()["metadata"]["provider"] == "yfinance", \
+            "Expected provider=yfinance when explicitly requested"
+
+        # Explicit tradestation request returns tradestation (or yfinance fallback in CI)
+        ts_resp = client.post("/api/v1/inference/predict/AAPL?provider=tradestation")
+        assert ts_resp.status_code == 200
+        provider_used = ts_resp.json()["metadata"]["provider"]
+        assert provider_used in ("tradestation", "yfinance"), \
+            f"Unexpected provider selected: {provider_used!r}"
+
+    def test_no_random_provider_selection(self, client: TestClient):
+        """Provider must be deterministic — same provider on repeated identical requests."""
+        providers_used = set()
+
+        for _ in range(5):
+            response = client.post("/api/v1/inference/predict/AAPL?provider=yfinance")
+            assert response.status_code == 200
+            providers_used.add(response.json()["metadata"]["provider"].lower())
+
+        assert len(providers_used) == 1, \
+            f"Provider changed across requests: {providers_used}"
+        assert "yfinance" in providers_used

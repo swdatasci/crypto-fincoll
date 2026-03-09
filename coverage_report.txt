@@ -1,0 +1,109 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.0.2, pluggy-1.6.0
+rootdir: /home/rford/caelum/caelum-supersystem/fincoll
+configfile: pyproject.toml
+plugins: mock-3.15.1, anyio-4.12.1, cov-7.0.0, asyncio-1.3.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 147 items
+
+tests/test_auth_notifications.py s.........                              [  6%]
+tests/test_context_generator.py ..................                       [ 19%]
+tests/test_enriched_api.py .................                             [ 30%]
+tests/test_feature_labeler.py ............................               [ 49%]
+tests/test_no_version_numbers.py .....                                   [ 53%]
+tests/test_safe_mode.py ..................................               [ 76%]
+tests/unit/test_context_generator_full.py ......................         [ 91%]
+tests/unit/test_feature_labeler_full.py .............                    [100%]
+
+=============================== warnings summary ===============================
+tests/test_enriched_api.py::TestEnrichedAPI::test_get_enriched_prediction_success[asyncio]
+  /home/rford/caelum/caelum-supersystem/fincoll/fincoll/api/enriched.py:128: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "timestamp": datetime.utcnow().isoformat() + "Z",
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.3-final-0 ________________
+
+Name                                                 Stmts   Miss  Cover   Missing
+----------------------------------------------------------------------------------
+fincoll/__init__.py                                      4      0   100%
+fincoll/ab_testing_manager.py                           50     50     0%   14-166
+fincoll/api/__init__.py                                  0      0   100%
+fincoll/api/ab_testing.py                               55     55     0%   10-162
+fincoll/api/backtesting.py                             285    285     0%   5-771
+fincoll/api/bars.py                                    123    123     0%   9-395
+fincoll/api/enriched.py                                218     89    59%   41-42, 49-51, 140-141, 148-152, 173-223, 237-284, 296-370, 459-461, 557-568
+fincoll/api/inference.py                               290    257    11%   28-29, 36-38, 52-75, 91-119, 124-127, 135-148, 176-248, 263-280, 294-309, 320, 341-482, 501-668, 687-784
+fincoll/api/market_data.py                              25     25     0%   8-85
+fincoll/api/pim_interface.py                           115     83    28%   47-48, 56-63, 134-183, 206-228, 247-292, 318-338, 343-356
+fincoll/api/symvector_batch.py                         111    111     0%   20-316
+fincoll/api/training.py                                 76     76     0%   5-206
+fincoll/auth/__init__.py                                 2      0   100%
+fincoll/auth/oauth_server.py                            61     61     0%   8-147
+fincoll/auth/tradestation_auth.py                      181    112    38%   23-29, 56, 71, 96-97, 101-107, 125-134, 143-149, 161-208, 217-236, 256-264, 272-275, 319-342, 352-407, 411-416
+fincoll/collectors/__init__.py                           0      0   100%
+fincoll/config/__init__.py                               2      2     0%   3-5
+fincoll/config/dimensions.py                           120    120     0%   22-315
+fincoll/data/__init__.py                                 3      3     0%   10-13
+fincoll/data/cache_manager.py                           61     61     0%   14-212
+fincoll/data/data_fetcher.py                           162    162     0%   18-459
+fincoll/features/__init__.py                             5      0   100%
+fincoll/features/advanced_risk.py                       67     58    13%   36, 62-155, 168, 181, 208-210
+fincoll/features/constructor.py                         45     45     0%   14-176
+fincoll/features/context_generator.py                  184      2    99%   370-371
+fincoll/features/early_signal_features.py              122    117     4%   26-213, 218
+fincoll/features/fama_french.py                        162    162     0%   15-313
+fincoll/features/feature_combiner.py                   169    169     0%   15-456
+fincoll/features/feature_extractor.py                 1267   1179     7%   47-49, 56-58, 65-67, 74-76, 83-85, 94-96, 159-284, 293-305, 309-322, 346-351, 376-458, 475-693, 724-759, 777-869, 873-877, 891-909, 941-950, 964-1123, 1142-1345, 1351-1361, 1372-1386, 1392-1402, 1408-1419, 1423-1434, 1440-1469, 1475-1488, 1494-1509, 1515-1525, 1536-1553, 1557-1567, 1578-1595, 1601-1607, 1613-1622, 1626-1681, 1696-1713, 1731-1839, 1865-1955, 1970-2069, 2094-2125, 2137-2164, 2180-2289, 2301-2374, 2387-2472, 2478, 2482-2531, 2555-2625, 2642-2651, 2668-2696, 2710-2740, 2755-2819, 2834-2922, 2938-3036, 3041-3083
+fincoll/features/feature_labeler.py                    101      0   100%
+fincoll/features/financial_features.py                 100     73    27%   37, 52-53, 68-69, 92-100, 131-137, 163-168, 187-195, 223-224, 247-250, 276-279, 296-324, 329-359
+fincoll/features/fundamental_embeddings.py             187    132    29%   104-126, 130, 144, 160-174, 195-225, 237-252, 266-289, 302-316, 330-353, 366-381, 394-406, 418-439, 443-472, 477-489
+fincoll/features/fundamental_history.py                208    188    10%   47-54, 58, 62-67, 71-87, 91-108, 128-198, 217-276, 291-308, 329-348, 362-400, 415-421, 434-445, 450-482
+fincoll/features/futures_features.py                   139    115    17%   67-68, 85-140, 153-159, 174-191, 206-226, 245-277, 281-295, 304-328, 333-365
+fincoll/features/gpu_indicator_engine.py               107    107     0%   17-277
+fincoll/features/interpretations.py                    189     34    82%   79-88, 107-114, 136, 140, 147-158, 200, 212, 253-256, 276
+fincoll/features/market_neutral.py                      96     83    14%   43-47, 68-79, 98-116, 124-131, 170-242, 264, 286, 326-328
+fincoll/features/market_regime.py                      143    106    26%   75-91, 95, 124-128, 149-177, 210-229, 250-269, 288-297, 318-339, 351-411, 415-442, 456-471, 476-525
+fincoll/features/momentum_variations.py                 53     43    19%   35, 57-103, 114-125, 129, 140, 163-165
+fincoll/inference/__init__.py                            3      0   100%
+fincoll/inference/prediction_engine.py                  97     56    42%   133-152, 158-242, 255-268, 288-297
+fincoll/inference/velocity_engine.py                   130    108    17%   50-58, 64-66, 81-209, 246-284, 302-423, 462-484
+fincoll/model_registry_client.py                        59     59     0%   18-276
+fincoll/monitoring/__init__.py                           2      0   100%
+fincoll/monitoring/metrics.py                          130     85    35%   26-85, 234-257, 269-297, 310-316, 330-331, 382, 387-390, 395
+fincoll/monitoring/safe_mode.py                        186      0   100%
+fincoll/notifications.py                                71     71     0%   9-214
+fincoll/providers/__init__.py                           18      6    67%   30-31, 37-38, 44-45
+fincoll/providers/alpaca_trading_provider.py            48     35    27%   31-41, 64-128, 132-144, 148, 152-162
+fincoll/providers/alphavantage_client.py               182    166     9%   40-67, 110-138, 182-197, 224-245, 275-297, 301-309, 321-334, 338-351, 370-451, 464-507, 512-544
+fincoll/providers/base_trading_provider.py              67     46    31%   16-20, 24-36, 40-44, 48, 60-61, 74-89, 103, 110, 114, 123-132, 153-158
+fincoll/providers/multi_provider_fetcher.py            213    180    15%   26-31, 76-78, 85-90, 94-95, 99-101, 127-196, 214-270, 275-278, 299-330, 341-350, 360-370, 378-386, 393-394, 405-447, 451-462, 465, 469-479, 483-490
+fincoll/providers/public_trading_provider.py            55     42    24%   29-38, 61-130, 134-149, 153, 157-163
+fincoll/providers/tradestation_trading_provider.py      56     43    23%   31-47, 70-129, 138-151, 155, 159-169
+fincoll/server.py                                      539    539     0%   12-1322
+fincoll/services/__init__.py                             2      2     0%   7-9
+fincoll/services/senvec_controller.py                  122    122     0%   11-246
+fincoll/sources/__init__.py                              0      0   100%
+fincoll/sources/yfinance_minute_fetcher.py              62     62     0%   2-132
+fincoll/storage/__init__.py                              0      0   100%
+fincoll/storage/config_version.py                       76     76     0%   12-197
+fincoll/storage/influxdb_cache.py                      106     93    12%   52-74, 87-101, 122-160, 183-253, 271-299, 303-304, 314-316
+fincoll/storage/influxdb_loader.py                     115    115     0%   21-326
+fincoll/storage/influxdb_saver.py                      130    130     0%   26-362
+fincoll/symvector.py                                   453    453     0%   18-1120
+fincoll/tools/__init__.py                                3      3     0%   13-27
+fincoll/tools/diagnostics_api.py                       177    177     0%   16-605
+fincoll/tools/feature_registry.py                       79     79     0%   8-456
+fincoll/tools/vector_analyzer.py                       201    201     0%   14-559
+fincoll/training/__init__.py                             2      0   100%
+fincoll/training/historical_feature_updater.py         252    252     0%   13-633
+fincoll/training/target_computer.py                    204    204     0%   14-526
+fincoll/training/train_interface.py                    146    107    27%   109-165, 187-229, 253-289, 306-317, 332-362, 374-401, 416-466
+fincoll/utils/__init__.py                                0      0   100%
+fincoll/utils/api_credentials.py                       100    100     0%   8-161
+fincoll/utils/notifications.py                          71     12    83%   44-46, 94, 127, 162, 190-192, 212-214
+fincoll/utils/senvec_integration.py                    151    131    13%   36-41, 46-48, 53-58, 72-104, 131-207, 230-289, 299-318, 322-349
+----------------------------------------------------------------------------------
+TOTAL                                                 9596   8043    16%
+Coverage HTML written to dir htmlcov
+================== 146 passed, 1 skipped, 1 warning in 22.07s ==================

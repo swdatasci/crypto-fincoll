@@ -1,0 +1,289 @@
+#!/usr/bin/env python3
+"""
+V6 Implementation Script - Apply Beta-Residual Features
+
+This script applies the V6 beta-residual momentum features to feature_extractor.py.
+Run this after the file has been renamed from v5_feature_extractor.py.
+
+Changes:
+1. Add data_provider parameter to __init__
+2. Add SPY cache and residual history cache
+3. Update _extract_cross_asset_features() to implement beta-residual calculations
+4. Add _get_spy_data() helper method
+5. Add _calculate_residual_history() helper method
+6. Update extract_features() to pass beta to cross-asset extraction
+
+Usage:
+    python v6_implementation.patch
+"""
+
+import re
+
+FEATURE_EXTRACTOR_PATH = "fincoll/features/feature_extractor.py"
+
+# Read the current file
+with open(FEATURE_EXTRACTOR_PATH, 'r') as f:
+    content = f.read()
+
+# Change 1: Update __init__ signature and add caches
+init_pattern = r'(def __init__\(\s*self,\s*alpha_vantage_client=None,\s*cache_fundamentals: bool = True,\s*cache_news: bool = True,\s*enable_senvec: bool = True)\s*\):'
+init_replacement = r'\1,\n        data_provider=None\n    ):'
+content = re.sub(init_pattern, init_replacement, content)
+
+# Add data_provider documentation
+doc_pattern = r'(enable_senvec: Enable SenVec features \(72D sentiment\))\s*"""'
+doc_replacement = r'\1\n            data_provider: Data provider for SPY data (yfinance or tradestation)\n        """'
+content = re.sub(doc_pattern, doc_replacement, content)
+
+# Add data_provider assignment
+assign_pattern = r'(self\.enable_senvec = enable_senvec and SENVEC_AVAILABLE)'
+assign_replacement = r'\1\n        self.data_provider = data_provider'
+content = re.sub(assign_pattern, assign_replacement, content)
+
+# Add SPY cache
+cache_pattern = r'(self\._news_cache = \{\}  # \{\(symbol, time_bucket\): \(data, timestamp\)\})'
+cache_replacement = r'\1\n        self._spy_cache = {}  # {timestamp_bucket: (data, timestamp)}'
+content = re.sub(cache_pattern, cache_replacement, content)
+
+# Add SPY TTL
+ttl_pattern = r'(self\.news_ttl = timedelta\(minutes=5\))'
+ttl_replacement = r'\1\n        self.spy_ttl = timedelta(hours=4)  # SPY data cache (4-hour window)'
+content = re.sub(ttl_pattern, ttl_replacement, content)
+
+# Change 2: Update extract_features to pass beta
+extract_pattern = r'# 5\. Fundamentals \(16D\) - f171-f186\s*fundamental_features = self\._extract_fundamental_features\(symbol\)\s*features\.append\(fundamental_features\)\s*# 6\. Cross-asset signals \(18D\) - f187-f204\s*cross_asset = self\._extract_cross_asset_features\(timestamp\)\s*features\.append\(cross_asset\)'
+extract_replacement = '''# 5. Fundamentals (16D) - f171-f186
+        fundamental_features = self._extract_fundamental_features(symbol)
+        features.append(fundamental_features)
+
+        # Extract beta for cross-asset features
+        beta = fundamental_features[14] if len(fundamental_features) > 14 else 1.0
+
+        # 6. Cross-asset signals (18D) - f187-f204
+        cross_asset = self._extract_cross_asset_features(timestamp, ohlcv_data, symbol, beta)
+        features.append(cross_asset)'''
+content = re.sub(extract_pattern, extract_replacement, content, flags=re.DOTALL)
+
+# Change 3: Replace _extract_cross_asset_features method
+cross_asset_old = r'def _extract_cross_asset_features\(self, timestamp: datetime\) -> np\.ndarray:\s*"""Extract 18D cross-asset signals \(f187-f204\)"""\s*# Placeholder.*?return np\.zeros\(18, dtype=np\.float32\)'
+
+cross_asset_new = '''def _extract_cross_asset_features(
+        self,
+        timestamp: datetime,
+        ohlcv_data: pd.DataFrame,
+        symbol: str,
+        beta: float
+    ) -> np.ndarray:
+        """
+        Extract 18D cross-asset signals (f187-f204) - V6 Beta-Adjusted Residual Momentum
+
+        Implements residual momentum strategy:
+        - Expected Return: E[R] = beta × R_market
+        - Residual: ε = R_stock - E[R] (deviation from beta expectation)
+        - Z-Score: Z = ε / σ_ε (outlier detection)
+        - Acceleration: Second derivative of residual (breaking away signal)
+
+        Args:
+            timestamp: Current bar timestamp
+            ohlcv_data: Stock OHLCV data
+            symbol: Stock ticker
+            beta: Stock beta from fundamentals
+
+        Returns:
+            18D feature array:
+            - 1-day horizon (6D): f187-f192
+            - 5-day horizon (6D): f193-f198
+            - 20-day horizon (6D): f199-f204
+        """
+        try:
+            features = []
+
+            # Get SPY data with caching
+            spy_data = self._get_spy_data(timestamp, lookback=60)
+            if spy_data is None or len(spy_data) < 20:
+                logger.warning(f"Insufficient SPY data for {timestamp}, using zeros")
+                return np.zeros(18, dtype=np.float32)
+
+            # Calculate for multiple horizons (1d, 5d, 20d)
+            horizons = [1, 5, 20]
+
+            for horizon in horizons:
+                # Calculate returns
+                if len(ohlcv_data) < horizon + 5 or len(spy_data) < horizon + 5:
+                    # Not enough data for this horizon
+                    features.extend([0.0] * 6)
+                    continue
+
+                # Market return (SPY)
+                spy_return = (spy_data['close'].iloc[-1] / spy_data['close'].iloc[-horizon-1]) - 1.0
+                features.append(spy_return)
+
+                # Stock return
+                stock_return = (ohlcv_data['close'].iloc[-1] / ohlcv_data['close'].iloc[-horizon-1]) - 1.0
+
+                # Expected return based on beta
+                expected_return = beta * spy_return
+
+                # Residual (deviation from beta expectation)
+                residual = stock_return - expected_return
+                features.append(residual)
+
+                # Calculate residual history for Z-score and derivatives
+                residual_history = self._calculate_residual_history(
+                    symbol, ohlcv_data, spy_data, beta, horizon, lookback=60
+                )
+
+                # Z-score of residual (outlier detection)
+                if len(residual_history) >= 2:
+                    residual_std = np.std(residual_history)
+                    residual_zscore = residual / residual_std if residual_std > 1e-8 else 0.0
+                    features.append(residual_zscore)
+                else:
+                    features.append(0.0)
+
+                # Residual velocity (first derivative)
+                if len(residual_history) >= 2:
+                    residual_velocity = residual - residual_history[-2]
+                    features.append(residual_velocity)
+                else:
+                    features.append(0.0)
+
+                # Residual acceleration (second derivative) - KEY SIGNAL
+                if len(residual_history) >= 3:
+                    prev_velocity = residual_history[-2] - residual_history[-3]
+                    residual_accel = residual_velocity - prev_velocity if len(residual_history) >= 2 else 0.0
+                    features.append(residual_accel)
+                else:
+                    features.append(0.0)
+
+                # Residual jerk (third derivative) - regime shift detector
+                if len(residual_history) >= 4:
+                    prev_accel = (residual_history[-2] - residual_history[-3]) - (residual_history[-3] - residual_history[-4])
+                    residual_jerk = residual_accel - prev_accel if len(residual_history) >= 3 else 0.0
+                    features.append(residual_jerk)
+                else:
+                    features.append(0.0)
+
+            return np.array(features, dtype=np.float32)
+
+        except Exception as e:
+            logger.warning(f"Failed to extract cross-asset features for {symbol}: {e}")
+            return np.zeros(18, dtype=np.float32)
+
+    def _get_spy_data(self, timestamp: datetime, lookback: int = 60) -> Optional[pd.DataFrame]:
+        """
+        Fetch SPY data with caching
+
+        Args:
+            timestamp: Current timestamp
+            lookback: Number of days of history to fetch
+
+        Returns:
+            DataFrame with SPY OHLCV data or None if unavailable
+        """
+        try:
+            # Check cache (bucket by hour to allow reuse)
+            cache_key = timestamp.strftime("%Y-%m-%d-%H")
+
+            if cache_key in self._spy_cache:
+                cached_data, cached_time = self._spy_cache[cache_key]
+                if datetime.now() - cached_time < self.spy_ttl:
+                    return cached_data
+
+            # Fetch SPY data
+            if self.data_provider is None:
+                logger.warning("No data provider configured for SPY data")
+                return None
+
+            # Calculate date range
+            end_date = timestamp
+            start_date = timestamp - timedelta(days=lookback + 30)  # Extra buffer for market holidays
+
+            # Fetch from provider
+            spy_data = self.data_provider.get_bars(
+                "SPY",
+                start_date.strftime("%Y-%m-%d"),
+                end_date.strftime("%Y-%m-%d"),
+                interval="1d"
+            )
+
+            if spy_data is None or len(spy_data) == 0:
+                logger.warning(f"No SPY data available for {timestamp}")
+                return None
+
+            # Cache result
+            self._spy_cache[cache_key] = (spy_data, datetime.now())
+
+            return spy_data
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch SPY data: {e}")
+            return None
+
+    def _calculate_residual_history(
+        self,
+        symbol: str,
+        ohlcv_data: pd.DataFrame,
+        spy_data: pd.DataFrame,
+        beta: float,
+        horizon: int,
+        lookback: int = 60
+    ) -> List[float]:
+        """
+        Calculate historical residuals for Z-score and derivative calculations
+
+        Args:
+            symbol: Stock ticker
+            ohlcv_data: Stock OHLCV data
+            spy_data: SPY OHLCV data
+            beta: Stock beta
+            horizon: Return horizon (1, 5, or 20 days)
+            lookback: Number of historical residuals to calculate
+
+        Returns:
+            List of historical residuals (oldest to newest)
+        """
+        try:
+            residuals = []
+
+            # Calculate residuals for each historical point
+            max_lookback = min(lookback, len(ohlcv_data) - horizon - 1, len(spy_data) - horizon - 1)
+
+            for i in range(max_lookback, 0, -1):
+                # Stock return at time t-i
+                stock_return = (ohlcv_data['close'].iloc[-i] / ohlcv_data['close'].iloc[-i-horizon]) - 1.0
+
+                # Market return at time t-i
+                spy_return = (spy_data['close'].iloc[-i] / spy_data['close'].iloc[-i-horizon]) - 1.0
+
+                # Expected return
+                expected_return = beta * spy_return
+
+                # Residual
+                residual = stock_return - expected_return
+                residuals.append(residual)
+
+            return residuals
+
+        except Exception as e:
+            logger.warning(f"Failed to calculate residual history for {symbol}: {e}")
+            return []'''
+
+content = re.sub(cross_asset_old, cross_asset_new, content, flags=re.DOTALL)
+
+# Write the updated content
+with open(FEATURE_EXTRACTOR_PATH, 'w') as f:
+    f.write(content)
+
+print("✅ V6 beta-residual features applied successfully!")
+print("📝 Modified: fincoll/features/feature_extractor.py")
+print("")
+print("Changes applied:")
+print("  1. Added data_provider parameter to __init__()")
+print("  2. Added SPY and residual history caches")
+print("  3. Implemented full beta-adjusted residual momentum in _extract_cross_asset_features()")
+print("  4. Added _get_spy_data() helper with caching")
+print("  5. Added _calculate_residual_history() helper")
+print("  6. Updated extract_features() to pass beta value")
+print("")
+print("Next: Commit the changes with 'git commit'")

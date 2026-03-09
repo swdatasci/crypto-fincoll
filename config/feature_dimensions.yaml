@@ -1,0 +1,209 @@
+# Crypto Feature Dimension Configuration (421D Total)
+# Baseline 245D + Cross-Market 20D + Crypto Market 156D
+# Updated: 2026-03-08
+
+# =============================================================================
+# SenVec Sentiment Features (Crypto)
+# =============================================================================
+senvec:
+    total: 0  # DISABLED for now - no crypto senvec services running
+    feature_range: "f215-f214"  # Empty range
+    components:
+        # TODO: Enable when crypto senvec services are deployed
+        alphavantage:
+            dimensions: 0
+            range: "f215-f214"
+            description: "DISABLED - crypto market sentiment (Fear/Greed, funding rates)"
+            service_url: null  # http://10.32.3.27:18007 when ready
+            update_frequency: null
+
+        social:
+            dimensions: 0
+            range: "f215-f214"
+            description: "DISABLED - crypto social sentiment (Twitter, Reddit, Telegram)"
+            service_url: null  # http://10.32.3.27:18008 when ready
+            update_frequency: null
+            
+        news:
+            dimensions: 0
+            range: "f215-f214"
+            description: "Not applicable to crypto"
+            service_url: null
+
+# =============================================================================
+# FinColl Feature Extractor (421D Total for Crypto)
+# =============================================================================
+fincoll:
+    total: 391  # 421 - 30 (senvec disabled)
+    components:
+        # ========== Core Features (245D) ==========
+        
+        technical:
+            dimensions: 81
+            datasource: "Alpaca Crypto"
+            description: "Core technical indicators (RSI, MACD, Bollinger, ATR, etc.)"
+            update_frequency: "real-time"
+            rate_limit:
+                requests_per_minute: 200
+                plan: "Alpaca Crypto (free tier)"
+
+        advanced_technical:
+            dimensions: 50
+            datasource: "Alpaca Crypto"
+            description: "Advanced technical indicators (Ichimoku, divergence, cycles)"
+            update_frequency: "1-minute bars"
+            rate_limit:
+                requests_per_minute: 200
+                plan: "Alpaca Crypto (free tier)"
+
+        velocity:
+            dimensions: 20
+            datasource: "Alpaca Crypto"
+            description: "Price velocity and acceleration (derived from OHLCV)"
+            update_frequency: "real-time"
+            rate_limit:
+                requests_per_minute: 200
+                plan: "Alpaca Crypto (derived)"
+
+        # Equities-only features (set to 0 for crypto)
+        news:
+            dimensions: 0
+            datasource: null
+            description: "Not applicable to crypto (uses social sentiment instead)"
+
+        fundamentals:
+            dimensions: 0
+            datasource: null
+            description: "Not applicable to crypto (no PE, earnings, dividends)"
+
+        cross_asset:
+            dimensions: 34  # Original crypto-specific features
+            datasource: "CoinGecko / On-chain APIs"
+            description: "Crypto-specific features (funding rates, liquidations, on-chain)"
+            update_frequency: "5-minute"
+            rate_limit:
+                calls_per_minute: 50
+                plan: "CoinGecko Demo"
+
+        sector:
+            dimensions: 0
+            datasource: null
+            description: "Not applicable to crypto (uses categorization instead)"
+
+        options:
+            dimensions: 0
+            datasource: null
+            description: "Not applicable to crypto (limited options markets)"
+
+        support_resistance:
+            dimensions: 0
+            datasource: "Alpaca Crypto"
+            description: "Derived from price action (not yet implemented)"
+
+        vwap:
+            dimensions: 0
+            datasource: "Alpaca Crypto"
+            description: "VWAP features (not yet implemented)"
+
+        senvec:
+            dimensions: 0  # DISABLED - no crypto senvec services running
+            datasource: null
+            description: "DISABLED - crypto sentiment (enable when services deployed)"
+            service_url: null
+            update_frequency: null
+
+        futures:
+            dimensions: 0
+            datasource: null
+            description: "Not applicable to crypto (no equity futures)"
+
+        finnhub:
+            dimensions: 0
+            datasource: null
+            description: "Not applicable to crypto"
+
+        early_signal:
+            dimensions: 30  # Original cross-market features
+            datasource: "Multiple"
+            description: "Cross-crypto correlations, BTC dominance, market cap ratios"
+            update_frequency: "1-minute"
+
+        market_neutral:
+            dimensions: 0
+            datasource: null
+            description: "Not applicable to crypto"
+
+        advanced_risk:
+            dimensions: 0
+            datasource: null
+            description: "Not applicable to crypto (not yet implemented)"
+
+        momentum_variations:
+            dimensions: 0
+            datasource: null
+            description: "Not applicable to crypto (not yet implemented)"
+
+        # ========== NEW: Cross-Market Features (20D) ==========
+        
+        cross_market_equities:
+            dimensions: 20
+            datasource: "YFinance"
+            description: "Cross-market correlations (SPY, QQQ, VIX, ES, NQ futures)"
+            update_frequency: "1-minute"
+            rate_limit:
+                requests_per_second: 5
+                plan: "YFinance (free)"
+                
+        # ========== NEW: Extended Crypto Market Features (156D) ==========
+        
+        crypto_market_extended:
+            dimensions: 156
+            datasource: "Multi-Provider (CoinGecko, CryptoCompare, CoinMarketCap)"
+            description: "Extended crypto features (metadata, pools, treasuries, clustering)"
+            update_frequency: "5-minute"
+            rate_limit:
+                combined_calls_per_minute: 60
+                plan: "Multi-Provider Free Tiers"
+
+# =============================================================================
+# Model Configurations
+# =============================================================================
+models:
+    velocity_transformer:
+        input_dim: 391  # Must match fincoll.total (421 - 30 senvec)
+        output_dim: 10
+        d_model: 256
+        n_heads: 8
+        n_layers: 6
+        sequence_length: 128
+        dropout: 0.1
+
+# =============================================================================
+# Validation Rules
+# =============================================================================
+validation:
+    zero_threshold: 0.50  # 50% overall
+    min_samples: 1000
+    min_symbols: 5
+
+# =============================================================================
+# Feature Breakdown (421D Total)
+# =============================================================================
+# Technical:                    81D (0-80)
+# Advanced Technical:           50D (81-130)
+# Velocity:                     20D (131-150)
+# Cross-Asset (crypto-specific): 34D (151-184)
+# Early Signal (cross-crypto):   30D (185-214)
+# SenVec Sentiment:             30D (215-244)
+# Cross-Market Equities (NEW):  20D (245-264)
+# Crypto Market Extended (NEW): 156D (265-420)
+# =============================================================================
+# TOTAL:                       391D (421D when senvec enabled)
+# =============================================================================
+
+# Version info
+version: "2.0.0"
+last_updated: "2026-03-08"
+compatible_with:
+    finvec_crypto: ">=0.1.0"
+    fincoll_crypto: ">=0.1.0"

@@ -1,0 +1,43 @@
+# FinColl Requirements
+
+# Core API Framework
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.6.0
+pydantic-settings>=2.1.0
+python-multipart>=0.0.9
+
+# Data Processing
+pandas>=2.2.0
+numpy>=1.26.0
+pyarrow>=15.0.0
+
+# Financial Data Sources
+alpaca-py>=0.18.0
+# tradestation SDK in pim-api-clients/tradestation
+
+# Machine Learning
+scikit-learn>=1.4.0
+# torch installed separately with CUDA: pip install torch --index-url https://download.pytorch.org/whl/cu128
+
+# Technical Analysis
+pandas-ta>=0.3.14
+
+# HTTP Client
+httpx>=0.26.0
+aiohttp>=3.9.0
+
+# Environment and Config
+python-dotenv>=1.0.0
+
+# Utilities
+python-dateutil>=2.8.0
+pytz>=2024.1
+
+# Logging and Monitoring
+loguru>=0.7.0
+
+# Testing (development)
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+pytest-cov>=4.1.0

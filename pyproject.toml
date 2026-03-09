@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["fincoll*"]
+exclude = ["tests*", "api*", "logs*", "config*", "models*", "archive*", "workflows*"]
+
+[project]
+name = "fincoll"
+version = "0.1.0"
+description = "Financial data collection and ML feature pipeline"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "aiohttp>=3.9.0",
+    "fastapi>=0.121.0",
+    "httpx>=0.28.1",
+    "influxdb-client>=1.18.0",
+    "numpy>=2.3.4",
+    "pandas>=2.3.3",
+    "psycopg2-binary>=2.9.11",
+    "pyarrow>=23.0.0",
+    "pytest>=8.4.2",
+    "pytest-mock>=3.15.1",
+    "python-dotenv>=1.2.1",
+    "pyyaml>=6.0.1",
+    "redis>=7.0.1",
+    "requests>=2.32.5",
+    "scikit-learn>=1.7.2",
+    "ta-lib>=0.6.8",
+    "torch>=2.0.0",
+    "uvicorn>=0.38.0",
+    "yfinance>=0.2.66",
+    "pydantic>=2.0.0",
+    "pytz>=2023.3",
+    "asyncpg>=0.31.0",
+    "gpu-quant",
+]
+
+[tool.uv.sources]
+tradestation-py = { path = "../../pim-api-clients/tradestation", editable = true }
+alpaca-py = { path = "../../pim-api-clients/alpaca", editable = true }
+publicdotcom-py = { path = "../../pim-api-clients/public", editable = true }
+pim-api-clients-common = { path = "../../pim-api-clients/common", editable = true }
+gpu-quant = { path = "/home/rford/caelum/gpu-quant-repo", editable = true }
+
+[project.optional-dependencies]
+trading = [
+    "tradestation-py",
+    "alpaca-py",
+    "publicdotcom-py",
+    "pim-api-clients-common",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
