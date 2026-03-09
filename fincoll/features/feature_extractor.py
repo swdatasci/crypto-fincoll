@@ -243,13 +243,13 @@ class FeatureExtractor:
         else:
             self.cross_market_extractor = None
 
-        # Initialize crypto market extractor (NEW - 156D multi-provider features)
+        # Initialize crypto market extractor (NEW - 126D multi-provider features)
         self.enable_crypto_market = CRYPTO_MARKET_AVAILABLE
         if self.enable_crypto_market:
             try:
                 self.crypto_market_extractor = MultiProviderCryptoFeatureExtractor()
                 logger.info(
-                    "Crypto market features enabled (CoinGecko, CryptoCompare, CoinMarketCap - 156D)"
+                    "Crypto market features enabled (CoinGecko, CryptoCompare, CoinMarketCap - 126D)"
                 )
             except Exception as e:
                 logger.warning(f"Could not initialize crypto market extractor: {e}")
@@ -257,6 +257,25 @@ class FeatureExtractor:
                 self.crypto_market_extractor = None
         else:
             self.crypto_market_extractor = None
+
+        # Initialize Binance GPU fundamentals extractor (NEW - 18D GPU-accelerated fundamentals)
+        self.enable_binance_gpu = (
+            True  # Always try to enable (falls back to zeros gracefully)
+        )
+        if self.enable_binance_gpu:
+            try:
+                from .crypto_market_features import BinanceGPUFundamentalsExtractor
+
+                self.binance_gpu_extractor = BinanceGPUFundamentalsExtractor()
+                logger.info(
+                    "Binance GPU fundamentals enabled (ATH/ATL, volatility, Sharpe, indicators - 18D)"
+                )
+            except Exception as e:
+                logger.warning(f"Could not initialize Binance GPU extractor: {e}")
+                self.enable_binance_gpu = False
+                self.binance_gpu_extractor = None
+        else:
+            self.binance_gpu_extractor = None
 
         # Initialize InfluxDB saver if enabled
         if self.enable_influxdb_storage:
@@ -643,7 +662,7 @@ class FeatureExtractor:
                 np.zeros(DIMS.fincoll_cross_market_equities, dtype=np.float32)
             )
 
-        # 19. Crypto Market Extended (156D) - NEW [CRYPTO FUNDAMENTALS]
+        # 19. Crypto Market Extended (126D) - NEW [CRYPTO FUNDAMENTALS]
         # Multi-provider round-robin (CoinGecko, CryptoCompare, CoinMarketCap)
         # Token metadata, pools, exchanges, treasuries, categorization, fundamentals
         if self.enable_crypto_market:
@@ -662,6 +681,28 @@ class FeatureExtractor:
         else:
             features.append(
                 np.zeros(DIMS.fincoll_crypto_market_extended, dtype=np.float32)
+            )
+
+        # 20. Binance GPU Fundamentals (18D) - NEW [GPU-ACCELERATED INDICATORS]
+        # GPU-computed fundamentals from Binance.US provider
+        # ATH/ATL metrics, volatility, Sharpe ratio, technical indicators (SMA, RSI, MACD, ATR, ADX)
+        # ~65x faster than Python (3ms vs 200ms per symbol on NVIDIA RTX 5060 Ti)
+        if self.enable_binance_gpu:
+            try:
+                binance_gpu_features = self.binance_gpu_extractor.extract(
+                    symbol=symbol, timestamp=timestamp
+                )
+                features.append(binance_gpu_features)
+            except Exception as e:
+                logger.warning(
+                    f"Binance GPU fundamentals extraction failed for {symbol}: {e}"
+                )
+                features.append(
+                    np.zeros(DIMS.fincoll_binance_gpu_fundamentals, dtype=np.float32)
+                )
+        else:
+            features.append(
+                np.zeros(DIMS.fincoll_binance_gpu_fundamentals, dtype=np.float32)
             )
 
         # Concatenate all features

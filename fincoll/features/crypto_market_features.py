@@ -646,3 +646,138 @@ class MultiProviderCryptoFeatureExtractor:
     def __exit__(self, *args):
         """Context manager exit."""
         self.close()
+
+
+class BinanceGPUFundamentalsExtractor:
+    """
+    Extracts GPU-accelerated fundamentals from Binance provider (18D).
+
+    Fetches from Binance HTTP provider (port 9004) which uses GPU-computed
+    indicators for ~65x performance improvement vs Python.
+
+    Features (18D):
+    - ATH metrics (6D): current_price, ath, distance%, atl, distance%, metadata
+    - Volatility (2D): 30d, 7d
+    - Sharpe (1D): 30d risk-adjusted return
+    - SMA (3D): 7, 30, 90 day
+    - RSI (1D): GPU-computed
+    - MACD (3D): line, signal, histogram (GPU-computed)
+    - ATR (1D): GPU-computed
+    - ADX (1D): GPU-computed
+    """
+
+    BINANCE_PROVIDER_URL = "http://10.32.3.27:9004"
+
+    def __init__(self, enable_cache: bool = True, cache_ttl: int = 60):
+        """Initialize Binance fundamentals extractor."""
+        self.enable_cache = enable_cache
+        self.cache_ttl = cache_ttl
+        self.session = requests.Session()
+
+    def extract(self, symbol: str, timestamp: Optional[datetime] = None) -> np.ndarray:
+        """
+        Extract Binance GPU fundamentals for a symbol (18D).
+
+        Args:
+            symbol: Crypto symbol (e.g., "BTC", "ETH", "BTCUSDT")
+            timestamp: Not used (for compatibility with other extractors)
+
+        Returns:
+            18D feature vector with GPU-accelerated indicators
+        """
+        try:
+            # Normalize symbol to Binance format (e.g., BTC -> BTCUSDT)
+            binance_symbol = self._normalize_symbol(symbol)
+
+            # Fetch from Binance provider
+            response = self.session.get(
+                f"{self.BINANCE_PROVIDER_URL}/fundamentals/{binance_symbol}", timeout=5
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            # Extract 18D features
+            features = [
+                # ATH metrics (6D)
+                data.get("current_price", 0.0),
+                data.get("ath", 0.0),
+                data.get("distance_from_ath_percent", 0.0),
+                data.get("atl", 0.0),
+                data.get("distance_from_atl_percent", 0.0),
+                0.0,  # metadata placeholder
+                # Volatility (2D)
+                data.get("volatility_30d", 0.0),
+                data.get("volatility_7d", 0.0),
+                # Sharpe (1D)
+                data.get("sharpe_ratio_30d") or 0.0,
+                # SMA (3D)
+                data.get("sma_7", 0.0),
+                data.get("sma_30", 0.0),
+                data.get("sma_90", 0.0),
+                # GPU-computed indicators (6D)
+                data.get("rsi_14", 0.0),
+                data.get("macd_line", 0.0) if "macd_line" in data else 0.0,
+                data.get("macd_signal", 0.0) if "macd_signal" in data else 0.0,
+                data.get("macd_histogram", 0.0) if "macd_histogram" in data else 0.0,
+                data.get("atr_14", 0.0) if "atr_14" in data else 0.0,
+                data.get("adx_14", 0.0) if "adx_14" in data else 0.0,
+            ]
+
+            logger.debug(
+                f"Fetched Binance GPU fundamentals for {binance_symbol}: {len(features)}D"
+            )
+            return np.array(features, dtype=np.float32)
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch Binance fundamentals for {symbol}: {e}")
+            # Return zeros on error (graceful degradation)
+            return np.zeros(18, dtype=np.float32)
+
+    def _normalize_symbol(self, symbol: str) -> str:
+        """
+        Normalize symbol to Binance format.
+
+        Examples:
+            BTC -> BTC
+            bitcoin -> BTC
+            BTCUSDT -> BTC
+        """
+        # Common mappings
+        symbol_map = {
+            "bitcoin": "BTC",
+            "ethereum": "ETH",
+            "binancecoin": "BNB",
+            "solana": "SOL",
+            "cardano": "ADA",
+            "polkadot": "DOT",
+            "avalanche": "AVAX",
+            "polygon": "MATIC",
+            "chainlink": "LINK",
+            "litecoin": "LTC",
+        }
+
+        symbol_lower = symbol.lower()
+
+        # Check if it's a CoinGecko ID
+        if symbol_lower in symbol_map:
+            return symbol_map[symbol_lower]
+
+        # Remove USDT suffix if present
+        if symbol.upper().endswith("USDT"):
+            return symbol[:-4].upper()
+
+        # Return as-is (assume it's already in correct format)
+        return symbol.upper()
+
+    def close(self):
+        """Close HTTP session."""
+        if self.session:
+            self.session.close()
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, *args):
+        """Context manager exit."""
+        self.close()
