@@ -1,24 +1,24 @@
 """
-Crypto Market Feature Extractor with Multi-Provider Fallback (156D)
+Crypto Market Feature Extractor with Multi-Provider Fallback (126D)
 
 Implements round-robin provider strategy to maximize combined free rate limits:
 - CoinGecko: 50 calls/min (primary)
 - CryptoCompare: 138 calls/hour (backup)
 - CoinMarketCap: 13 calls/hour (fallback)
 
-Feature Groups (156D Total):
+Feature Groups (126D Total):
 - Token Metadata (18D): Holders, audits, age, legitimacy signals
 - Onchain Pools (14D): DEX liquidity, TVL, slippage risk
 - Crypto Market (9D): BTC dominance, market cap, altcoin season
 - Exchanges & Derivatives (11D): Listing quality, CEX/DEX ratio
 - Public Treasuries (6D): Institutional holdings (MicroStrategy, Tesla)
 - Categorization (31D): Layer 1/2, DeFi, NFT, consensus type
-- Fundamentals (25D): Supply, market cap, developer activity
+- Fundamentals (REMOVED - 0D): Now provided by Binance GPU-accelerated service (18D)
 - Dynamic Clustering (12D): Correlation-based groupings
-- Macro Factors (25D): Economic indicators, VIX, DXY
+- Macro Factors (20D): Economic indicators, VIX, DXY (reduced from 25D)
 - Sentiment Analysis (5D): Fear/Greed, social media sentiment
 
-Total: 156 dimensions
+Total: 126 dimensions (156D - 30D moved to Binance GPU fundamentals)
 """
 
 import logging
@@ -121,14 +121,17 @@ class MultiProviderCryptoFeatureExtractor:
         timestamp: Optional[datetime] = None,
     ) -> np.ndarray:
         """
-        Extract crypto market features for a symbol (156D).
+        Extract crypto market features for a symbol (126D).
+
+        NOTE: Fundamentals (ATH/ATL, volatility, Sharpe, technical indicators) are now
+        provided by Binance GPU-accelerated service (18D) for ~65x performance improvement.
 
         Args:
             symbol: Crypto symbol (e.g., "bitcoin", "ethereum", "BTC")
             timestamp: Current timestamp (defaults to now)
 
         Returns:
-            156D feature vector as numpy array
+            126D feature vector as numpy array
         """
         if timestamp is None:
             timestamp = datetime.now()
@@ -163,15 +166,14 @@ class MultiProviderCryptoFeatureExtractor:
             categorization = self._extract_categorization(coin_id)
             features.extend(categorization)
 
-            # 7. Fundamentals (25D)
-            fundamentals = self._extract_fundamentals(coin_id)
-            features.extend(fundamentals)
+            # 7. Fundamentals (REMOVED - now from Binance GPU service)
+            # Previously 25D, now 0D here, 18D from Binance provider
 
             # 8. Dynamic Clustering (12D)
             clustering = self._extract_dynamic_clustering(coin_id)
             features.extend(clustering)
 
-            # 9. Macro Factors (25D)
+            # 9. Macro Factors (20D - reduced from 25D)
             macro_factors = self._extract_macro_factors()
             features.extend(macro_factors)
 
@@ -182,13 +184,13 @@ class MultiProviderCryptoFeatureExtractor:
         except Exception as e:
             logger.error(f"Error extracting crypto features for {symbol}: {e}")
             # Return zeros on error (graceful degradation)
-            features = [0.0] * 156
+            features = [0.0] * 126
 
-        # Ensure exactly 156 dimensions
-        if len(features) < 156:
-            features.extend([0.0] * (156 - len(features)))
-        elif len(features) > 156:
-            features = features[:156]
+        # Ensure exactly 126 dimensions
+        if len(features) < 126:
+            features.extend([0.0] * (126 - len(features)))
+        elif len(features) > 126:
+            features = features[:126]
 
         return np.array(features, dtype=np.float32)
 
@@ -609,10 +611,11 @@ class MultiProviderCryptoFeatureExtractor:
         return [0.0] * 12
 
     def _extract_macro_factors(self) -> List[float]:
-        """Extract macro economic factors (25D)."""
+        """Extract macro economic factors (20D - reduced from 25D)."""
         # Placeholder - requires macro economic data APIs
         # (Federal Reserve API, Bloomberg, etc.)
-        return [0.0] * 25
+        # Reduced from 25D to 20D to make room for Binance GPU fundamentals (18D)
+        return [0.0] * 20
 
     def _extract_sentiment(self, coin_id: str) -> List[float]:
         """

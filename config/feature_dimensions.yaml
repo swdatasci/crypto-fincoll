@@ -1,6 +1,6 @@
-# Crypto Feature Dimension Configuration (421D Total)
-# Baseline 245D + Cross-Market 20D + Crypto Market 156D
-# Updated: 2026-03-08
+# Crypto Feature Dimension Configuration (379D Total)
+# Core 265D + Crypto Market 96D + Binance GPU Fundamentals 18D
+# Updated: 2026-03-08 (Added Binance GPU-accelerated fundamentals, reduced crypto_market_extended from 156D to 126D)
 
 # =============================================================================
 # SenVec Sentiment Features (Crypto)
@@ -31,10 +31,10 @@ senvec:
             service_url: null
 
 # =============================================================================
-# FinColl Feature Extractor (421D Total for Crypto)
+# FinColl Feature Extractor (379D Total for Crypto)
 # =============================================================================
 fincoll:
-    total: 391  # 421 - 30 (senvec disabled)
+    total: 379  # 409 - 30 (senvec disabled)
     components:
         # ========== Core Features (245D) ==========
         
@@ -154,23 +154,48 @@ fincoll:
                 requests_per_second: 5
                 plan: "YFinance (free)"
                 
-        # ========== NEW: Extended Crypto Market Features (156D) ==========
+        # ========== NEW: Extended Crypto Market Features (126D) ==========
         
         crypto_market_extended:
-            dimensions: 156
+            dimensions: 126
             datasource: "Multi-Provider (CoinGecko, CryptoCompare, CoinMarketCap)"
             description: "Extended crypto features (metadata, pools, treasuries, clustering)"
             update_frequency: "5-minute"
             rate_limit:
                 combined_calls_per_minute: 60
                 plan: "Multi-Provider Free Tiers"
+                
+        # ========== NEW: Binance GPU-Accelerated Fundamentals (18D) ==========
+        
+        binance_gpu_fundamentals:
+            dimensions: 18
+            datasource: "Binance.US (GPU-accelerated)"
+            description: "GPU-computed fundamentals (ATH/ATL, volatility, Sharpe, technical indicators)"
+            update_frequency: "1-minute"
+            rate_limit:
+                requests_per_minute: 200
+                plan: "Binance.US (free tier)"
+            features:
+                ath_metrics: 6  # current_price, ath, distance_from_ath%, atl, distance_from_atl%, metadata
+                volatility: 2   # volatility_30d, volatility_7d
+                sharpe: 1       # sharpe_ratio_30d
+                sma: 3          # sma_7, sma_30, sma_90
+                rsi: 1          # rsi_14 (GPU-computed)
+                macd: 3         # macd_line, macd_signal, macd_histogram (GPU-computed)
+                atr: 1          # atr_14 (GPU-computed)
+                adx: 1          # adx_14 (GPU-computed)
+            performance:
+                gpu_engine: "NVIDIA RTX 5060 Ti (16GB)"
+                latency_per_symbol: "~3ms (65x faster than Python)"
+                indicators_computed_on_gpu: 8
+                redis_cache_ttl: 60
 
 # =============================================================================
 # Model Configurations
 # =============================================================================
 models:
     velocity_transformer:
-        input_dim: 391  # Must match fincoll.total (421 - 30 senvec)
+        input_dim: 379  # Must match fincoll.total (409 - 30 senvec)
         output_dim: 10
         d_model: 256
         n_heads: 8
@@ -187,18 +212,19 @@ validation:
     min_symbols: 5
 
 # =============================================================================
-# Feature Breakdown (421D Total)
+# Feature Breakdown (379D Total)
 # =============================================================================
-# Technical:                    81D (0-80)
-# Advanced Technical:           50D (81-130)
-# Velocity:                     20D (131-150)
-# Cross-Asset (crypto-specific): 34D (151-184)
-# Early Signal (cross-crypto):   30D (185-214)
-# SenVec Sentiment:             30D (215-244)
-# Cross-Market Equities (NEW):  20D (245-264)
-# Crypto Market Extended (NEW): 156D (265-420)
+# Technical:                        81D (0-80)
+# Advanced Technical:               50D (81-130)
+# Velocity:                         20D (131-150)
+# Cross-Asset (crypto-specific):    34D (151-184)
+# Early Signal (cross-crypto):      30D (185-214)
+# SenVec Sentiment:                 30D (215-244) [DISABLED]
+# Cross-Market Equities (NEW):      20D (245-264)
+# Crypto Market Extended (REDUCED): 126D (265-390)
+# Binance GPU Fundamentals (NEW):   18D (391-408)
 # =============================================================================
-# TOTAL:                       391D (421D when senvec enabled)
+# TOTAL:                          379D (409D when senvec enabled)
 # =============================================================================
 
 # Version info

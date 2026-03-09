@@ -78,7 +78,8 @@ class FeatureDimensions:
     fincoll_advanced_risk: int
     fincoll_momentum_variations: int
     fincoll_cross_market_equities: int  # NEW: Cross-market correlations (20D)
-    fincoll_crypto_market_extended: int  # NEW: Extended crypto features (156D)
+    fincoll_crypto_market_extended: int  # NEW: Extended crypto features (126D)
+    fincoll_binance_gpu_fundamentals: int  # NEW: GPU-accelerated fundamentals (18D)
 
     # Model
     model_input: int
@@ -159,6 +160,9 @@ def load_dimensions(config_path: Optional[Path] = None) -> FeatureDimensions:
         ),
         fincoll_crypto_market_extended=_dim(
             config["fincoll"]["components"].get("crypto_market_extended", 0)
+        ),
+        fincoll_binance_gpu_fundamentals=_dim(
+            config["fincoll"]["components"].get("binance_gpu_fundamentals", 0)
         ),
         # Model
         model_input=config["models"]["velocity_transformer"]["input_dim"],
@@ -246,6 +250,7 @@ def validate_consistency() -> bool:
         + DIMS.fincoll_momentum_variations
         + DIMS.fincoll_cross_market_equities
         + DIMS.fincoll_crypto_market_extended
+        + DIMS.fincoll_binance_gpu_fundamentals
     )
     if fincoll_sum != DIMS.fincoll_total:
         raise ValueError(
